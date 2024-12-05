@@ -6,10 +6,10 @@
 (define updates (map (λ(s) (map string->number (string-split s ","))) (rest updates^)))
 
 (define rules
-  (for/fold ([graph (hash)])
+  (for/fold ([rules (hash)])
             ([line rules^])
     (match-define (list before after) (map string->number (string-split line "|")))
-    (hash-update graph before (λ(x) (cons after x)) '())))
+    (hash-update rules before (λ(x) (cons after x)) '())))
 
 (define (middle-value lst)
   (list-ref lst (floor (/ (length lst) 2))))
