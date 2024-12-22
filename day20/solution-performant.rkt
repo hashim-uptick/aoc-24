@@ -1,4 +1,7 @@
-#lang racket
+#lang racket/base
+(require (only-in racket/port port->lines)
+         (only-in racket/match match match-define)
+         (only-in racket/list drop-right count))
 (define grid (list->vector (map (compose list->vector string->list) (with-input-from-file "input.txt" port->lines))))
 (define vert (vector-length grid))
 (define horz (vector-length (vector-ref grid 0)))
