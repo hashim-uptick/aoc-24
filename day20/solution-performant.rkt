@@ -2,16 +2,15 @@
 (define grid (list->vector (map (compose list->vector string->list) (with-input-from-file "input.txt" port->lines))))
 (define vert (vector-length grid))
 (define horz (vector-length (vector-ref grid 0)))
-(define (value-at grid x y) (and (>= x 0) (>= y 0) (< y vert) (< x horz)
-                                 (vector-ref (vector-ref grid y) x)))
+(define (value-at grid x y) (vector-ref (vector-ref grid y) x))
 (define (value-at-xy grid xy) (let ([x (real-part xy)] [y (imag-part xy)]) (value-at grid x y)))
 (define (find-val grid val)
-  (for*/first ([y (range vert)] [x (range horz)] #:when (char=? (value-at grid x y) val))
+  (for*/first ([y (in-range vert)] [x (in-range horz)] #:when (char=? (value-at grid x y) val))
     (make-rectangular x y)))
 (define (neighbours pt) (list (+ pt 1) (- pt 1) (+ pt +i) (- pt +i)))
 (define start (find-val grid #\S))
-(define start-dir (for/first ([cand (neighbours start)]
-                              [dir (list 'e 'w 's 'n)]
+(define start-dir (for/first ([cand (in-list (neighbours start))]
+                              [dir (in-list (list 'e 'w 's 'n))]
                               #:when (char=? (value-at-xy grid cand) #\.))
                     dir))
 (define end (find-val grid #\E))
@@ -19,21 +18,20 @@
 (define (clockwise dir) (match dir ['n 'e] ['e 's] ['s 'w] ['w 'n]))
 (define (anticlockwise dir) (match dir ['n 'w] ['w 's] ['s 'e] ['e 'n]))
 (define (next-in-track grid pt dir)
-  (for/first ([d* (list dir (clockwise dir) (anticlockwise dir))]
+  (for/first ([d* (in-list (list dir (clockwise dir) (anticlockwise dir)))]
               #:do [(define p* (next-point-in-dir pt d*))]
-              #:when (member (value-at-xy grid p*) (list #\. #\E)))
+              #:when (let ([v* (value-at-xy grid p*)]) (or (char=? v* #\.) (char=? v* #\E))))
     (cons p* d*)))
-
+(struct cheat. (dist pt) #:transparent)
 (define (potential-cheats grid pt dist)
-  (remove-duplicates
-   (for*/list ([x (in-range 0 (add1 dist))]
-               [yn (in-range 0 (add1 (- dist x)))]
-               #:do [(define y (make-rectangular 0 yn))]
-               [dx (list x (- x))]
-               [dy (list y (- y))]
-               #:do [(define p* (+ pt dx dy)) (define v* (value-at-xy grid p*))]
-               #:when (member v* '(#\. #\E)))
-     (cons (+ x yn) p*))))
+  (define-values (px py) (values (real-part pt) (imag-part pt)))
+  (for*/list ([x (in-range (max 0 (- px dist)) (min horz (+ 1 px dist)))]
+              #:do [(define dx (abs (- px x)))]
+              [y (in-range (max 0 (- py (- dist dx)))
+                           (min vert (+ 1 py (- dist dx))))]
+              #:do [(define v* (value-at grid x y))]
+              #:when (or (char=? v* #\.) (char=? v* #\E)))
+    (cheat. (+ dx (abs (- py y))) (make-rectangular x y))))
 
 (define point-steps (build-vector vert (λ(_) (build-vector horz (λ(_) 0)))))
 (define (set-score pt score) (let ([x (real-part pt)] [y (imag-part pt)])
@@ -44,22 +42,23 @@
   (let loop ([steps 0]
              [cur-pt start]
              [cur-dir start-dir])
-    (if (equal? cur-pt end)
+    (if (= cur-pt end)
         (begin0 (list (cons end cur-dir)) (set-score cur-pt steps))
         (let ()
           (match-define (cons p* d*) (next-in-track grid cur-pt cur-dir))
           (set-score cur-pt steps) (cons (cons cur-pt cur-dir)
-                                                     (loop (add1 steps) p* d*))))))
+                                         (loop (add1 steps) p* d*))))))
 
 (define (find-cheats max-time)
-  (for/sum ([p+d race-track])
+  (for/sum ([p+d (in-list (drop-right race-track 100))])
     (match-define (cons p d) p+d)
     (define cheat-pts (potential-cheats grid p max-time))
     (count (λ(dist+cheat)
-             (match-define (cons dist cheat) dist+cheat)
+             (match-define (cheat. dist cheat) dist+cheat)
              (define saved (- (get-score cheat) (get-score p) dist))
              (>= saved 100))
            cheat-pts)))
 
-(find-cheats 2)  ;; 1454
-(find-cheats 20)  ;; 997879
+(for/last ([_ (in-range 1)])
+  (find-cheats 2)  #; 1454
+  (find-cheats 20) #;997879)
