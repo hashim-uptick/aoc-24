@@ -15,9 +15,9 @@
                   [unsafe-car ucar]
                   [unsafe-cdr ucdr]
                   [unsafe-vector-set! uvector-set!]))
-
-(define inp (string-trim (with-input-from-file "input.txt" port->string)))
-(define-values (l-grid vert horz start-c end-c)
+(time
+(define inp (string-trim (with-input-from-file "D" port->string)))
+(define-values (l-grid vert horz start-c end-c)  ;; read grid
   (for/fold ([grid '()] [row '()] [vert 1] [horz 0] [start #f] [end #f]
                         #:result (values (reverse (cons (reverse row) grid)) vert horz start end))
             ([c (in-string inp)])
@@ -26,11 +26,11 @@
         (values grid (cons c row) vert (u+ 1 horz)
                 (if (and (not start) (uchar=? c #\S)) (cons horz (u- vert 1)) start)
                 (if (and (not end) (uchar=? c #\E)) (cons horz (u- vert 1)) end)))))
-(define grid (list->vector (apply append l-grid)))
+(define grid (list->vector (apply append l-grid))) ;; convert to a single 1-dimensional vector
 (define (value-at grid x y) (uvector-ref grid (u+ x (u* y horz))))
 (define (value-at-xy grid xy) (uvector-ref grid xy))
-(define start (u+ (ucar start-c) (u* horz (ucdr start-c))))
-(define end (u+ (ucar end-c) (u* horz (ucdr end-c))))
+(define start (u+ (ucar start-c) (u* horz (ucdr start-c)))) ;; convert start coords to 1d vector coord
+(define end (u+ (ucar end-c) (u* horz (ucdr end-c))))  ;; same ^
 (define start-dir (for/first ([cand (in-list (list (u+ start 1) (u- start 1) (u+ start horz) (u- start horz)))]
                               [dir (in-list (list 'e 'w 's 'n))]
                               #:when (uchar=? (value-at-xy grid cand) #\.)) dir))
@@ -46,6 +46,7 @@
         (loop (ucdr remaining)))))
 
 (define (potential-cheats grid pt dist pt-score [threshold 100])
+  ;; find manhattan distance locus within grid and return number of points with a score difference above threshold
   (define-values (px py) (values (remainder pt horz) (quotient pt horz)))
   (for*/sum ([x (in-range (umax 0 (u- px dist)) (umin horz (u+ 1 px dist)))]
              #:do [(define dx (uabs (u- px x)))]
@@ -62,7 +63,7 @@
 (define (get-score-xy xy) (uvector-ref point-steps xy))
 (define race-track (make-vector (quotient (u* vert horz) 2) 0))  ;; over-pre-allocate space, we'll know the length next
 (define race-track-len
-  (let loop ([steps 0]
+  (let loop ([steps 0]  ;; fill in the race track, returning the length
              [cur-pt start]
              [cur-dir start-dir])
     (if (= cur-pt end)
@@ -73,7 +74,7 @@
           (uvector-set! race-track steps cur-pt)
           (loop (u+ 1 steps) p* d*)))))
 
-(define (find-cheats max-time)  ;; Is this really slower?
+(define (find-cheats max-time)  ;; split race track into 8 jobs and sum the results
   (define (inner from to)
     (for/sum ([p (in-vector race-track from to)])
       (define p-score (get-score-xy p))
@@ -84,14 +85,12 @@
       (if (>= idx (u- race-track-len 100))
           '()
           (cons (future (λ() (inner idx (u+ idx chunk-size)))) (loop (u+ idx chunk-size))))))
-  (apply + (map touch tasks)))
+  (apply u+ (map touch tasks)))
 
-(define (find-cheats-seq max-time)
+(values (find-cheats 2)  #; 1454
+        (find-cheats 20) #;997879))
+
+#;(define (find-cheats-seq max-time)
   (for/sum ([p (in-vector race-track 0 (u- race-track-len 100))])
     (define p-score (get-score-xy p))
     (potential-cheats grid p max-time p-score)))
-
-#;(find-cheats-seq 2)  #; 1454
-#;(find-cheats-seq 20) #;997879
-(find-cheats 2)
-(find-cheats 20)
